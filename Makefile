@@ -3,7 +3,7 @@
 
 all: fence_ipmi
 
-CFLAGS += -Wall
+CFLAGS ?= -Wall -g
 
 fence_ipmi: fence_ipmi.o
 	$(LINK.o) $(LDFLAGS) $^ -o $@

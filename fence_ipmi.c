@@ -360,6 +360,9 @@ static int ipmi_action(const struct ipmiarg *opt)
 	else if (strcmp(opt->action, "metadata") == 0) {
 		echo_metadata();
 		return retv;
+	} else if (strcmp(opt->action, "start") == 0 ||
+			strcmp(opt->action, "stop") == 0) {
+		return 0;
 	} else {
 		fprintf(stderr, "Unknown action ignored.\n");
 		return 1;

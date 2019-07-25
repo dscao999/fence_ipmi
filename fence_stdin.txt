@@ -1,0 +1,5 @@
+action=monitor
+nodename=mars
+nodelist=nodelist.conf
+user=USERID
+pass=PASSW0RD
