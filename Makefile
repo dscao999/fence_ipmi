@@ -1,7 +1,7 @@
 
 .PHONY:	all clean install
 
-all: fence_ipmi
+all: fence_ipmi bmclist.conf
 
 CFLAGS ?= -Wall -g
 
@@ -9,12 +9,21 @@ fence_ipmi: fence_ipmi.o
 	$(LINK.o) $(LDFLAGS) $^ -o $@
 
 clean:
-	rm -f fence_ipmi core
+	rm -f bmclist.conf fence_ipmi core
 	rm -f *.o
 	rm -f core.*
 
-install:
+install: all
 	if [ ! -d $(DESTDIR)/sbin ]; then mkdir -p $(DESTDIR)/sbin; fi
 	install -m 0755 fence_ipmi $(DESTDIR)/sbin/fence_ipmi
 	if [ ! -d $(DESTDIR)/etc/pacemaker ]; then mkdir -p $(DESTDIR)/etc/pacemaker; fi
 	install -m 0644 bmclist.conf $(DESTDIR)/etc/pacemaker/bmclist.conf
+
+bmclist.conf:
+	@( echo "#";				\
+	echo "## BMC Node list with IP";	\
+	echo "#";				\
+	echo "##  [node name]   [ip address]";	\
+	echo "#";				\
+	echo "## venus 192.168.99.108";		\
+	echo "#"; ) > $@
