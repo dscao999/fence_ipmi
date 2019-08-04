@@ -139,10 +139,6 @@ static int parse_cmd(int argc, char *argv[], struct ipmiarg *opts)
 		opts->action = argv[optind];
 		retv++;
 	}
-	if (!opts->action)
-		opts->action = "metadata";
-	if (!opts->port)
-		opts->port = "623";
 	return retv;
 }
 
@@ -186,8 +182,6 @@ static void parse_stdin(struct ipmiarg *opts, char *page)
 			curp += strlen(curp) + 1;
 		llen = getline(&lbuf, &buflen, stdin);
 	}
-	if (!opts->action)
-		opts->action = "metadata";
 }
 
 static void echo_args(const struct ipmiarg *opts)
@@ -321,6 +315,14 @@ int main(int argc, char *argv[])
 		parse_stdin(&cmdarg, page);
 	if (cmdarg.nodelist == NULL)
 		cmdarg.nodelist = nodelist;
+	if (!cmdarg.action)
+		cmdarg.action = "metadata";
+	if (!cmdarg.port)
+		cmdarg.port = "623";
+	if (!cmdarg.user)
+		cmdarg.user = "USERID";
+	if (!cmdarg.pass)
+		cmdarg.pass = "PASSW0RD";
 	if (cmdarg.echo)
 		echo_args(&cmdarg);
 
@@ -447,23 +449,23 @@ static const char *metadata =
 "    fence_ipmilan is an I/O Fencing agentwhich can be used with machines controlled by IPMI.This agent calls support software ipmitool (http://ipmitool.sf.net/). WARNING! This fence agent might report success before the node is powered off. You should use -m/method onoff if your fence device works correctly with that option.\n"
 "  </longdesc>\n"
 "  <parameters>\n"
-"    <parameter name=\"action\" unique=\"0\" required=\"1\">\n"
+"    <parameter name=\"action\" required=\"1\">\n"
 "      <getopt mixed=\"-o, --action=[action]\"/>\n"
 "      <content type=\"string\" default=\"reboot\"/>\n"
 "      <shortdesc lang=\"en\">\n"
 "        Fencing action\n"
 "      </shortdesc>\n"
 "    </parameter>\n"
-"    <parameter name=\"pass\" required=\"1\">\n"
+"    <parameter name=\"pass\" required=\"0\">\n"
 "      <getopt mixed=\"-p, --pass=[password]\"/>\n"
-"      <content type=\"string\"/>\n"
+"      <content type=\"string\" default=\"PASSW0RD\"/>\n"
 "      <shortdesc lang=\"en\">\n"
 "        Login password or passphrase\n"
 "      </shortdesc>\n"
 "    </parameter>\n"
-"    <parameter name=\"user\" required=\"1\">\n"
+"    <parameter name=\"user\" required=\"0\">\n"
 "      <getopt mixed=\"-u, --user=[username]\"/>\n"
-"      <content type=\"string\"/>\n"
+"      <content type=\"string\" default=\"USERID\"/>\n"
 "      <shortdesc lang=\"en\">\n"
 "        Login name\n"
 "      </shortdesc>\n"
@@ -473,6 +475,13 @@ static const char *metadata =
 "      <content type=\"string\" default=\"623\"/>\n"
 "      <shortdesc lang=\"en\">\n"
 "        Port Number for BMC connection.\n"
+"      </shortdesc>\n"
+"    </parameter>\n"
+"    <parameter name=\"nodelist\" required=\"0\">\n"
+"      <getopt mixed=\"-n, --nodelist=[nodefile]\"/>\n"
+"      <content type=\"string\" default=\"/etc/pacemaker/bmclist.conf\"/>\n"
+"      <shortdesc lang=\"en\">\n"
+"        BMC Node List File.\n"
 "      </shortdesc>\n"
 "    </parameter>\n"
 "  </parameters>\n"
