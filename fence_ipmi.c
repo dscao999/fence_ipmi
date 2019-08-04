@@ -56,13 +56,13 @@ static int parse_cmd(int argc, char *argv[], struct ipmiarg *opts)
 			.name = "user",
 			.has_arg = 1,
 			.flag = NULL,
-			.val = 'u'
+			.val = 'U'
 		},
 		{
 			.name = "pass",
 			.has_arg = 1,
 			.flag = NULL,
-			.val = 'p'
+			.val = 'P'
 		},
 		{
 			.name = "bmc",
@@ -74,7 +74,7 @@ static int parse_cmd(int argc, char *argv[], struct ipmiarg *opts)
 			.name = "port",
 			.has_arg = 1,
 			.flag = NULL,
-			.val = 'P'
+			.val = 'p'
 		},
 		{
 			.name = "nodelist",
@@ -90,7 +90,7 @@ static int parse_cmd(int argc, char *argv[], struct ipmiarg *opts)
 		},
 		{}
 	};
-	static const char *sopts = ":u:p:m:P:n:e";
+	static const char *sopts = ":U:P:m:p:n:e";
 	extern char *optarg;
 	extern int optind, opterr, optopt;
 	int fin = 0, c, retv = 0;
@@ -111,11 +111,11 @@ static int parse_cmd(int argc, char *argv[], struct ipmiarg *opts)
 		case -1:
 			fin = 1;
 			break;
-		case 'u':
+		case 'U':
 			opts->user= optarg;
 			retv++;
 			break;
-		case 'p':
+		case 'P':
 			opts->pass= optarg;
 			retv++;
 			break;
@@ -123,7 +123,7 @@ static int parse_cmd(int argc, char *argv[], struct ipmiarg *opts)
 			opts->bmc = optarg;
 			retv++;
 			break;
-		case 'P':
+		case 'p':
 			opts->port = optarg;
 			retv++;
 			break;
@@ -140,7 +140,7 @@ static int parse_cmd(int argc, char *argv[], struct ipmiarg *opts)
 		retv++;
 	}
 	if (!opts->action)
-		opts->action = "off";
+		opts->action = "metadata";
 	if (!opts->port)
 		opts->port = "623";
 	return retv;
@@ -186,6 +186,8 @@ static void parse_stdin(struct ipmiarg *opts, char *page)
 			curp += strlen(curp) + 1;
 		llen = getline(&lbuf, &buflen, stdin);
 	}
+	if (!opts->action)
+		opts->action = "metadata";
 }
 
 static void echo_args(const struct ipmiarg *opts)
@@ -314,6 +316,7 @@ int main(int argc, char *argv[])
 	cmdarg.nodelist = NULL;
 	cmdarg.action = NULL;
 	cmdarg.echo = 0;
+	cmdarg.nips = NULL;
 	if (!parse_cmd(argc, argv, &cmdarg))
 		parse_stdin(&cmdarg, page);
 	if (cmdarg.nodelist == NULL)
@@ -321,12 +324,14 @@ int main(int argc, char *argv[])
 	if (cmdarg.echo)
 		echo_args(&cmdarg);
 
-	cmdarg.nips = parse_nodelist(cmdarg.nodelist);
-	if (!cmdarg.nips) {
-		fprintf(stderr, "Cannot parse node ip file: %s\n",
-				cmdarg.nodelist);
-		retv = 4;
-		goto exit_10;
+	if (strcmp(cmdarg.action, "metadata") != 0) {
+		cmdarg.nips = parse_nodelist(cmdarg.nodelist);
+		if (!cmdarg.nips) {
+			fprintf(stderr, "Cannot parse node ip file: %s\n",
+					cmdarg.nodelist);
+			retv = 4;
+			goto exit_10;
+		}
 	}
 
 	if (cmdarg.echo)
@@ -425,7 +430,7 @@ static int ipmi_spawn(const char *ip, const char *user, const char *pass,
 		fprintf(stderr, "fork failed: %s\n", strerror(errno));
 		retv = 9;
 	} else if (sysret == 0) {
-		sysret = execl("/usr/bin/ipmitool", "ipmitool", "-I", "lanplus",
+		sysret = execlp("ipmitool", "ipmitool", "-I", "lanplus",
 				"-H", ip, "-U", user, "-P", pass, "-p", port,
 				 "chassis", "power", action, NULL);
 		if (sysret == -1) {
@@ -449,37 +454,37 @@ static const char *metadata =
 "        Fencing action\n"
 "      </shortdesc>\n"
 "    </parameter>\n"
-"    <parameter name=\"password\" unique=\"0\" required=\"1\">\n"
-"      <getopt mixed=\"-p, --password=[password]\"/>\n"
+"    <parameter name=\"pass\" required=\"1\">\n"
+"      <getopt mixed=\"-p, --pass=[password]\"/>\n"
 "      <content type=\"string\"/>\n"
 "      <shortdesc lang=\"en\">\n"
 "        Login password or passphrase\n"
 "      </shortdesc>\n"
 "    </parameter>\n"
-"    <parameter name=\"username\" unique=\"0\" required=\"1\">\n"
-"      <getopt mixed=\"-l, --username=[name]\"/>\n"
+"    <parameter name=\"user\" required=\"1\">\n"
+"      <getopt mixed=\"-u, --user=[username]\"/>\n"
 "      <content type=\"string\"/>\n"
 "      <shortdesc lang=\"en\">\n"
 "        Login name\n"
 "      </shortdesc>\n"
 "    </parameter>\n"
-"    <parameter name=\"delay\" unique=\"0\" required=\"0\">\n"
-"      <getopt mixed=\"--delay=[seconds]\"/>\n"
-"      <content type=\"second\" default=\"0\"/>\n"
+"    <parameter name=\"port\" required=\"0\">\n"
+"      <getopt mixed=\"-P, --port=[port]\"/>\n"
+"      <content type=\"string\" default=\"623\"/>\n"
 "      <shortdesc lang=\"en\">\n"
-"        Wait X seconds before fencing is started\n"
+"        Port Number for BMC connection.\n"
 "      </shortdesc>\n"
 "    </parameter>\n"
 "  </parameters>\n"
 "  <actions>\n"
-"    <action name=\"on\" automatic=\"0\"/>\n"
+"    <action name=\"on\"/>\n"
 "    <action name=\"off\"/>\n"
 "    <action name=\"reboot\"/>\n"
 "    <action name=\"status\" timeout=\"30s\"/>\n"
 "    <action name=\"monitor\" timeout=\"30s\"/>\n"
 "    <action name=\"metadata\"/>\n"
-"    <action name=\"stop\" timeout=\"30s\"/>\n"
-"    <action name=\"start\" timeout=\"30s\"/>\n"
+"    <action name=\"stop\"/>\n"
+"    <action name=\"start\"/>\n"
 "  </actions>\n"
 "</resource-agent>\n";
 
