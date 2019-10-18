@@ -247,12 +247,11 @@ struct nodeip *parse_nodelist(const char *nodelist)
 		return NULL;
 	}
 	lcount = 0;
-	len = getline(&lbuf, &llen, fin);
-	while (!feof(fin)) {
-		if (!comment_line(lbuf, len))
-			lcount++;
+	do {
 		len = getline(&lbuf, &llen, fin);
-	}
+		if (len > 0 && !comment_line(lbuf, len))
+			lcount++;
+	} while (!feof(fin));
 	rewind(fin);
 
 	buf = malloc(lcount*(64+sizeof(struct nodeip))+sizeof(struct nodeip));
@@ -265,21 +264,18 @@ struct nodeip *parse_nodelist(const char *nodelist)
 
 	cip = nips;
 	chr = buf;
-	len = getline(&lbuf, &llen, fin);
-	while (!feof(fin)) {
-		if (comment_line(lbuf, len)) {
-			len = getline(&lbuf, &llen, fin);
+	do {
+		len = getline(&lbuf, &llen, fin);
+		if (len == 0 || comment_line(lbuf, len))
 			continue;
-		}
 		strcpy(chr, strtok(lbuf, " \t\n"));
 		cip->node = chr;
 		chr += strlen(chr) + 1;
 		strcpy(chr, strtok(NULL, " \t\n"));
 		cip->ip = chr;
 		chr += strlen(chr) + 1;
-		len = getline(&lbuf, &llen, fin);
 		cip++;
-	}
+	} while (!feof(fin));
 	cip->node = NULL;
 	cip->ip = NULL;
 	return nips;
@@ -364,6 +360,8 @@ static int ipmi_action(const struct ipmiarg *opt)
 		action = "cycle";
 	else if (strcmp(opt->action, "on") == 0)
 		action = "on";
+	else if (strcmp(opt->action, "soft") == 0)
+		action = "soft";
 	else if (strcmp(opt->action, "metadata") == 0) {
 		echo_metadata();
 		return retv;
@@ -489,6 +487,7 @@ static const char *metadata =
 "    <action name=\"on\"/>\n"
 "    <action name=\"off\"/>\n"
 "    <action name=\"reboot\"/>\n"
+"    <action name=\"soft\"/>\n"
 "    <action name=\"status\" timeout=\"30s\"/>\n"
 "    <action name=\"monitor\" timeout=\"30s\"/>\n"
 "    <action name=\"metadata\"/>\n"

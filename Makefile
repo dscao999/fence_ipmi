@@ -4,9 +4,10 @@
 all: fence_ipmi bmclist.conf
 
 CFLAGS ?= -Wall -g
+LDFLAGS = -g
 
 fence_ipmi: fence_ipmi.o
-	$(LINK.o) $(LDFLAGS) $^ -o $@
+	$(LINK.o) $^ -o $@
 
 clean:
 	rm -f bmclist.conf fence_ipmi core
