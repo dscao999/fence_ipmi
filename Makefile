@@ -24,7 +24,7 @@ bmclist.conf:
 	@( echo "#";				\
 	echo "## BMC Node list with IP";	\
 	echo "#";				\
-	echo "##  [node name]   [ip address]";	\
+	echo "##  [ip address] [node name]";	\
 	echo "#";				\
-	echo "## venus 192.168.99.108";		\
+	echo "## 192.168.99.108 venus";		\
 	echo "#"; ) > $@

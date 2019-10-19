@@ -278,10 +278,10 @@ struct nodeip *parse_nodelist(const char *nodelist)
 		if (len == 0 || comment_line(lbuf, len))
 			continue;
 		strcpy(chr, strtok(lbuf, " \t\n"));
-		cip->node = chr;
+		cip->ip = chr;
 		chr += strlen(chr) + 1;
 		strcpy(chr, strtok(NULL, " \t\n"));
-		cip->ip = chr;
+		cip->node = chr;
 		chr += strlen(chr) + 1;
 		cip++;
 	} while (!feof(fin));
@@ -432,23 +432,39 @@ static int ipmi_action(const struct ipmiarg *opt)
 static int ipmi_spawn(const struct nodeip *node, const char *user,
 		const char *pass, const char *port, const char *action)
 {
-	int retv = 0, sysret;
+	int retv = 0, sysret, len;
+	int pfd[2];
+	char buf[128];
 
+	sysret = pipe(pfd);
+	if (sysret == -1) {
+		logmsg(LOG_ERR, "pipe failed: %d\n", errno);
+		return errno;
+	}
 	sysret = fork();
 	if (sysret == -1) {
-		fprintf(stderr, "fork failed: %s\n", strerror(errno));
-		retv = 9;
+		logmsg(LOG_ERR, "fork failed: %s\n", strerror(errno));
+		retv = errno;
 	} else if (sysret == 0) {
-		logmsg(LOG_INFO, "Node: %s ", node->node);
-		log_flush();
+		close(pfd[0]);
+		close(1);
+		close(2);
+		dup(pfd[1]);
+		dup(pfd[1]);
 		sysret = execlp("ipmitool", "ipmitool", "-I", "lanplus",
 				"-H", node->ip, "-U", user, "-P", pass,
 				"-p", port, "chassis", "power", action, NULL);
 		if (sysret == -1) {
-			fprintf(stderr, "exec failed: %s\n", strerror(errno));
+			logmsg(LOG_ERR, "exec failed: %s\n", strerror(errno));
 			exit(errno);
 		}
 	}
+	close(pfd[1]);
+	len = sprintf(buf, "Node: %s ", node->node);
+	len += read(pfd[0], buf+len, 128-len);
+	buf[len] = 0;
+	logmsg(LOG_INFO, buf);
+	close(pfd[0]);
 	return retv;
 }
 
