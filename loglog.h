@@ -13,6 +13,10 @@
 	do {					\
 		vfprintf(stderr, fmt, ap);	\
 	} while (0)
+static inline void log_flush(void)
+{
+	fflush(stderr);
+}
 #endif
 
 static inline void logmsg(int level, const char *fmt, ...)

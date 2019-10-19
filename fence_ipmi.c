@@ -291,8 +291,8 @@ struct nodeip *parse_nodelist(const char *nodelist)
 }
 
 static int ipmi_action(const struct ipmiarg *opts);
-static int ipmi_spawn(const char *ip, const char *user, const char *pass,
-		const char *port, const char *action);
+static int ipmi_spawn(const struct nodeip *node, const char *user,
+		const char *pass, const char *port, const char *action);
 static void echo_metadata(void);
 
 static const char *nodelist = "/etc/pacemaker/bmclist.conf";
@@ -398,13 +398,13 @@ static int ipmi_action(const struct ipmiarg *opt)
 			fprintf(stderr, "Unknown BMC: %s\n", opt->bmc);
 			return 1;
 		}
-		retv = ipmi_spawn(cip->ip, opt->user, opt->pass, opt->port,
+		retv = ipmi_spawn(cip, opt->user, opt->pass, opt->port,
 				action);
 		if (!retv)
 			nochild = 1;
 	} else {
 		while (cip->node) {
-			ipmiret = ipmi_spawn(cip->ip, opt->user, opt->pass,
+			ipmiret = ipmi_spawn(cip, opt->user, opt->pass,
 					opt->port, action);
 			if (ipmiret == 0)
 				nochild++;
@@ -429,8 +429,8 @@ static int ipmi_action(const struct ipmiarg *opt)
 	return retv;
 }
 
-static int ipmi_spawn(const char *ip, const char *user, const char *pass,
-		const char *port, const char *action)
+static int ipmi_spawn(const struct nodeip *node, const char *user,
+		const char *pass, const char *port, const char *action)
 {
 	int retv = 0, sysret;
 
@@ -439,9 +439,11 @@ static int ipmi_spawn(const char *ip, const char *user, const char *pass,
 		fprintf(stderr, "fork failed: %s\n", strerror(errno));
 		retv = 9;
 	} else if (sysret == 0) {
+		logmsg(LOG_INFO, "Node: %s ", node->node);
+		log_flush();
 		sysret = execlp("ipmitool", "ipmitool", "-I", "lanplus",
-				"-H", ip, "-U", user, "-P", pass, "-p", port,
-				 "chassis", "power", action, NULL);
+				"-H", node->ip, "-U", user, "-P", pass,
+				"-p", port, "chassis", "power", action, NULL);
 		if (sysret == -1) {
 			fprintf(stderr, "exec failed: %s\n", strerror(errno));
 			exit(errno);
