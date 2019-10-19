@@ -22,6 +22,9 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include "loglog.h"
+
+#define unlikely(x) __builtin_expect(x, 0)
 
 struct nodeip {
 	const char *node;
@@ -100,10 +103,11 @@ static int parse_cmd(int argc, char *argv[], struct ipmiarg *opts)
 		c = getopt_long(argc, argv, sopts, options, NULL);
 		switch(c) {
 		case '?':
-			fprintf(stderr, "Unknown option %c\n", optopt);
+			logmsg(LOG_ERR, "Unknown option %c\n", optopt);
 			break;
 		case ':':
-			fprintf(stderr, "Missing option argument of %c\n", optopt);
+			logmsg(LOG_ERR,  "Missing option argument of %c\n",
+					optopt);
 			break;
 		case 'e':
 			opts->echo = 1;
@@ -150,12 +154,18 @@ static void parse_stdin(struct ipmiarg *opts, char *page)
 
 	lbuf = malloc(buflen);
 	if (!lbuf) {
-		fprintf(stderr, "Out of Memory!\n");
+		logmsg(LOG_CRIT, "Out of Memory!\n");
 		exit(10000);
 	}
 	curp = page;
-	llen = getline(&lbuf, &buflen, stdin);
-	while (!feof(stdin)) {
+	do {
+		llen = getline(&lbuf, &buflen, stdin);
+		if (unlikely(llen == -1)) {
+			logmsg(LOG_ERR, "getline from stdin failed: %d\n",
+					errno);
+			return;
+		} else if (llen == 0)
+			continue;
 		*curp = 0;
 		if (llen > 0 && lbuf[llen-1] == '\n')
 			lbuf[llen-1] = 0;
@@ -180,8 +190,7 @@ static void parse_stdin(struct ipmiarg *opts, char *page)
 		}
 		if (*curp != 0)
 			curp += strlen(curp) + 1;
-		llen = getline(&lbuf, &buflen, stdin);
-	}
+	} while (!feof(stdin));
 }
 
 static void echo_args(const struct ipmiarg *opts)
