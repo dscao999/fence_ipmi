@@ -71,7 +71,7 @@ static int parse_cmd(int argc, char *argv[], struct ipmiarg *opts)
 			.name = "bmc",
 			.has_arg = 1,
 			.flag = NULL,
-			.val = 'm'
+			.val = 'H'
 		},
 		{
 			.name = "port",
@@ -93,7 +93,7 @@ static int parse_cmd(int argc, char *argv[], struct ipmiarg *opts)
 		},
 		{}
 	};
-	static const char *sopts = ":U:P:m:p:n:e";
+	static const char *sopts = ":U:P:H:p:n:e";
 	extern char *optarg;
 	extern int optind, opterr, optopt;
 	int fin = 0, c, retv = 0;
@@ -123,7 +123,7 @@ static int parse_cmd(int argc, char *argv[], struct ipmiarg *opts)
 			opts->pass= optarg;
 			retv++;
 			break;
-		case 'm':
+		case 'H':
 			opts->bmc = optarg;
 			retv++;
 			break;
@@ -434,12 +434,17 @@ static int ipmi_spawn(const struct nodeip *node, const char *user,
 {
 	int retv = 0, sysret, len;
 	int pfd[2];
-	char buf[128];
+	char *buf;
 
 	sysret = pipe(pfd);
 	if (sysret == -1) {
 		logmsg(LOG_ERR, "pipe failed: %d\n", errno);
 		return errno;
+	}
+	buf = malloc(256);
+	if (!buf) {
+		logmsg(LOG_ERR, "Out of Memory!\n");
+		return 100;
 	}
 	sysret = fork();
 	if (sysret == -1) {
@@ -461,10 +466,11 @@ static int ipmi_spawn(const struct nodeip *node, const char *user,
 	}
 	close(pfd[1]);
 	len = sprintf(buf, "Node: %s ", node->node);
-	len += read(pfd[0], buf+len, 128-len);
+	len += read(pfd[0], buf+len, 256 - len - 1);
 	buf[len] = 0;
 	logmsg(LOG_INFO, buf);
 	close(pfd[0]);
+	free(buf);
 	return retv;
 }
 
