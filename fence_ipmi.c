@@ -275,7 +275,7 @@ struct nodeip *parse_nodelist(const char *nodelist)
 	chr = buf;
 	do {
 		len = getline(&lbuf, &llen, fin);
-		if (len == 0 || comment_line(lbuf, len))
+		if (len <= 0 || comment_line(lbuf, len))
 			continue;
 		strcpy(chr, strtok(lbuf, " \t\n"));
 		cip->ip = chr;
@@ -454,8 +454,8 @@ static int ipmi_spawn(const struct nodeip *node, const char *user,
 		close(pfd[0]);
 		close(1);
 		close(2);
-		dup(pfd[1]);
-		dup(pfd[1]);
+		if (unlikely((dup(pfd[1]) == -1) || (dup(pfd[1]) == -1)))
+			logmsg(LOG_WARNING, "dup failed: %d\n", errno);
 		sysret = execlp("ipmitool", "ipmitool", "-I", "lanplus",
 				"-H", node->ip, "-U", user, "-P", pass,
 				"-p", port, "chassis", "power", action, NULL);
