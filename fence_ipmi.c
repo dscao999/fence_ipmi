@@ -184,9 +184,6 @@ static void parse_stdin(struct ipmiarg *opts, char *page)
 		} else if (strstr(lbuf, "nodelist=") == lbuf) {
 			strcpy(curp, lbuf+9);
 			opts->nodelist = curp;
-		} else if (strstr(lbuf, "port=") == lbuf) {
-			strcpy(curp, lbuf+5);
-			opts->port = curp;
 		}
 		if (*curp != 0)
 			curp += strlen(curp) + 1;
