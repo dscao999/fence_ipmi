@@ -45,6 +45,8 @@ static void echo_nips(const struct nodeip *nips)
 {
 	const struct nodeip *ips;
 
+	if (!nips)
+		return;
 	ips = nips;
 	while (ips->node) {
 		printf("BMC: %16s, ip: %s\n", ips->node, ips->ip);

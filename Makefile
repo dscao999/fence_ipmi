@@ -15,8 +15,8 @@ clean:
 	rm -f core.*
 
 install: all
-	if [ ! -d $(DESTDIR)/sbin ]; then mkdir -p $(DESTDIR)/sbin; fi
-	install -m 0755 fence_ipmi $(DESTDIR)/sbin/fence_ipmi
+	if [ ! -d $(DESTDIR)/usr/sbin ]; then mkdir -p $(DESTDIR)/usr/sbin; fi
+	install -m 0755 fence_ipmi $(DESTDIR)/usr/sbin/fence_ipmi
 	if [ ! -d $(DESTDIR)/etc/pacemaker ]; then mkdir -p $(DESTDIR)/etc/pacemaker; fi
 	install -m 0644 bmclist.conf $(DESTDIR)/etc/pacemaker/bmclist.conf
 
