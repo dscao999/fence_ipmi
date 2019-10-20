@@ -24,7 +24,7 @@
 #include <sys/wait.h>
 #include "loglog.h"
 
-#define unlikely(x) __builtin_expect(x, 0)
+#define unlikely(x) __builtin_expect((x), 0)
 
 struct nodeip {
 	const char *node;
@@ -161,10 +161,13 @@ static void parse_stdin(struct ipmiarg *opts, char *page)
 	do {
 		llen = getline(&lbuf, &buflen, stdin);
 		if (unlikely(llen == -1)) {
+			if (feof(stdin))
+				break;
 			logmsg(LOG_ERR, "getline from stdin failed: %d\n",
 					errno);
 			return;
-		} else if (llen == 0)
+		}
+		if (llen == 0)
 			continue;
 		*curp = 0;
 		if (llen > 0 && lbuf[llen-1] == '\n')
