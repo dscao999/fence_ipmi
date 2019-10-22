@@ -7,7 +7,7 @@ CFLAGS ?= -Wall -g
 LDFLAGS = -g
 
 fence_ipmi: fence_ipmi.o
-	$(LINK.o) $^ -o $@
+	$(LINK.o) $^ -lpthread -o $@
 
 clean:
 	rm -f bmclist.conf fence_ipmi core

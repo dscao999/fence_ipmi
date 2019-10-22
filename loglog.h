@@ -27,4 +27,12 @@ static inline void logmsg(int level, const char *fmt, ...)
 	loginfo(level, fmt, ap);
 	va_end(ap);
 }
+
+static inline void check_pointer(void *a)
+{
+	if (!a) {
+		logmsg(LOG_CRIT, "Out of Memory!\n");
+		exit(100);
+	}
+}
 #endif  /* LOGLOG_DSCAO__ */

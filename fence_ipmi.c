@@ -20,15 +20,18 @@
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
+#include <pthread.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include "loglog.h"
 
 #define unlikely(x) __builtin_expect((x), 0)
 
+struct fork_arg;
 struct nodeip {
 	const char *node;
 	const char *ip;
+	struct fork_arg *forked;
 };
 struct ipmiarg {
 	const char *action;
@@ -247,13 +250,10 @@ struct nodeip *parse_nodelist(const char *nodelist)
 	struct nodeip *nips, *cip;
 
 	lbuf = malloc(llen);
-	if (!lbuf) {
-		fprintf(stderr, "Out of Memory!\n");
-		exit(10000);
-	}
+	check_pointer(lbuf);
 	fin = fopen(nodelist, "rb");
 	if (!fin) {
-		fprintf(stderr, "Cannot open file \"%s\" for read: %s\n",
+		logmsg(LOG_ERR, "Cannot open file \"%s\" for read: %s\n",
 				nodelist, strerror(errno));
 		return NULL;
 	}
@@ -265,11 +265,8 @@ struct nodeip *parse_nodelist(const char *nodelist)
 	} while (!feof(fin));
 	rewind(fin);
 
-	buf = malloc(lcount*(64+sizeof(struct nodeip))+sizeof(struct nodeip));
-	if (!buf) {
-		fprintf(stderr, "Out of Memory!\n");
-		exit(10000);
-	}
+	buf = malloc(lcount*(128+sizeof(struct nodeip))+sizeof(struct nodeip));
+	check_pointer(buf);
 	nips = (struct nodeip *)buf;
 	buf += sizeof(struct nodeip)*(lcount+1);
 
@@ -285,6 +282,7 @@ struct nodeip *parse_nodelist(const char *nodelist)
 		strcpy(chr, strtok(NULL, " \t\n"));
 		cip->node = chr;
 		chr += strlen(chr) + 1;
+		cip->forked = NULL;
 		cip++;
 	} while (!feof(fin));
 	cip->node = NULL;
@@ -292,11 +290,8 @@ struct nodeip *parse_nodelist(const char *nodelist)
 	return nips;
 }
 
-static int ipmi_action(const struct ipmiarg *opts);
-static int ipmi_spawn(const struct nodeip *node, const char *user,
-		const char *pass, const char *port, const char *action);
-static void echo_metadata(void);
 
+static int ipmi_action(struct ipmiarg *opts);
 static const char *nodelist = "/etc/pacemaker/bmclist.conf";
 
 int main(int argc, char *argv[])
@@ -306,10 +301,8 @@ int main(int argc, char *argv[])
 	char *page;
 
 	page = malloc(1024);
-	if (!page) {
-		fprintf(stderr, "Out of Memory!\n");
-		exit(10000);
-	}
+	check_pointer(page);
+
 	cmdarg.user= NULL;
 	cmdarg.pass= NULL;
 	cmdarg.bmc = NULL;
@@ -336,7 +329,7 @@ int main(int argc, char *argv[])
 	if (strcmp(cmdarg.action, "metadata") != 0) {
 		cmdarg.nips = parse_nodelist(cmdarg.nodelist);
 		if (!cmdarg.nips) {
-			fprintf(stderr, "Cannot parse node ip file: %s\n",
+			logmsg(LOG_ERR, "Cannot parse node ip file: %s\n",
 					cmdarg.nodelist);
 			retv = 4;
 			goto exit_10;
@@ -355,11 +348,22 @@ exit_10:
 	return retv;
 }
 
-static int ipmi_action(const struct ipmiarg *opt)
+struct fork_arg {
+	const struct nodeip *node;
+	const char *user, *pass, *port, *action;
+	pthread_t thid;
+	int err;
+	char buf[256];
+};
+
+static struct fork_arg *ipmi_spawn(const struct nodeip *node, const char *user,
+		const char *pass, const char *port, const char *action);
+static void echo_metadata(void);
+static int ipmi_action(struct ipmiarg *opt)
 {
 	const char *action;
-	int retv = 0, monitor = 0, nochild, ipmiret;
-	const struct nodeip *cip;
+	int retv = 0, monitor = 0;
+	struct nodeip *cip;
 
 	if (strcmp(opt->action, "status") == 0 ||
 			strcmp(opt->action, "monitor") == 0) {
@@ -375,21 +379,20 @@ static int ipmi_action(const struct ipmiarg *opt)
 		action = "soft";
 	else if (strcmp(opt->action, "metadata") == 0) {
 		echo_metadata();
-		return retv;
+		return 0;
 	} else if (strcmp(opt->action, "start") == 0 ||
 			strcmp(opt->action, "stop") == 0) {
 		return 0;
 	} else {
-		fprintf(stderr, "Unknown action ignored.\n");
-		return 1;
+		logmsg(LOG_WARNING, "Unknown action ignored.\n");
+		return 0;
 	}
 
-	nochild = 0;
 	cip = opt->nips;
 	if (!monitor) {
 		if (!opt->bmc) {
-			fprintf(stderr, "No BMC specified!\n");
-			return 1;
+			logmsg(LOG_WARNING, "No BMC specified!\n");
+			return 0;
 		}
 		while (cip->node) {
 			if (strcmp(cip->node, opt->bmc) == 0)
@@ -397,83 +400,109 @@ static int ipmi_action(const struct ipmiarg *opt)
 			cip++;
 		}
 		if (!cip->node) {
-			fprintf(stderr, "Unknown BMC: %s\n", opt->bmc);
-			return 1;
+			logmsg(LOG_WARNING, "Unknown BMC: %s\n", opt->bmc);
+			return 0;
 		}
-		retv = ipmi_spawn(cip, opt->user, opt->pass, opt->port,
+		cip->forked = ipmi_spawn(cip, opt->user, opt->pass, opt->port,
 				action);
-		if (!retv)
-			nochild = 1;
+		if (!cip->forked)
+			retv = 1;
 	} else {
 		while (cip->node) {
-			ipmiret = ipmi_spawn(cip, opt->user, opt->pass,
+			cip->forked = ipmi_spawn(cip, opt->user, opt->pass,
 					opt->port, action);
-			if (ipmiret == 0)
-				nochild++;
-			else
+			if (!cip->forked)
 				retv = 1;
 			cip++;
 		}
 	}
 
-	while(nochild) {
-		if (wait(&ipmiret) == -1) {
-			if (errno == EINTR)
-				continue;
-		}
-		if (WIFEXITED(ipmiret))
-			retv |= WEXITSTATUS(ipmiret);
-		else
+	for (cip = opt->nips; cip->node; cip++) {
+		if (!cip->forked)
+			continue;
+		pthread_join(cip->forked->thid, NULL);
+		if (cip->forked->err)
 			retv = 1;
-		nochild--;
+		free(cip->forked);
 	}
 
 	return retv;
 }
 
-static int ipmi_spawn(const struct nodeip *node, const char *user,
-		const char *pass, const char *port, const char *action)
+static void *fork_thread(void *arg)
 {
-	int retv = 0, sysret, len;
-	int pfd[2];
-	char *buf;
+	int pfd[2], sysret, ipmiret, len;
+	struct fork_arg *farg = arg;
+	pid_t child;
 
+	farg->err = 0;
 	sysret = pipe(pfd);
 	if (sysret == -1) {
 		logmsg(LOG_ERR, "pipe failed: %d\n", errno);
-		return errno;
+		farg->err = errno;
+		return arg;
 	}
-	buf = malloc(256);
-	if (!buf) {
-		logmsg(LOG_ERR, "Out of Memory!\n");
-		return 100;
-	}
-	sysret = fork();
-	if (sysret == -1) {
+	child = fork();
+	if (child == -1) {
 		logmsg(LOG_ERR, "fork failed: %s\n", strerror(errno));
-		retv = errno;
-	} else if (sysret == 0) {
+		farg->err = errno;
+		return arg;
+	} else if (child == 0) {
 		close(pfd[0]);
 		close(1);
 		close(2);
-		if (unlikely((dup(pfd[1]) == -1) || (dup(pfd[1]) == -1)))
+		if (unlikely((dup(pfd[1]) == -1) || (dup(pfd[1]) == -1))) {
 			logmsg(LOG_WARNING, "dup failed: %d\n", errno);
+			exit(errno);
+		}
 		sysret = execlp("ipmitool", "ipmitool", "-I", "lanplus",
-				"-H", node->ip, "-U", user, "-P", pass,
-				"-p", port, "chassis", "power", action, NULL);
+				"-H", farg->node->ip, "-U", farg->user,
+				"-P", farg->pass, "-p", farg->port, "chassis",
+				"power", farg->action, NULL);
 		if (sysret == -1) {
 			logmsg(LOG_ERR, "exec failed: %s\n", strerror(errno));
 			exit(errno);
 		}
 	}
 	close(pfd[1]);
-	len = sprintf(buf, "Node: %s ", node->node);
-	len += read(pfd[0], buf+len, 256 - len - 1);
-	buf[len] = 0;
-	logmsg(LOG_INFO, buf);
+	len = sprintf(farg->buf, "Node: %s ", farg->node->node);
+	do {
+		sysret = read(pfd[0], farg->buf+len, 256 - len - 1);
+		if (sysret > 0)
+			len += sysret;
+	} while (sysret > 0);
+	farg->buf[len] = 0;
+	do
+		sysret = waitpid(child, &ipmiret, 0);
+	while (sysret == -1 && errno == EINTR);
 	close(pfd[0]);
-	free(buf);
-	return retv;
+
+	if (!WIFEXITED(ipmiret) || WEXITSTATUS(ipmiret) != 0)
+		logmsg(LOG_INFO, farg->buf);
+	return farg;
+}
+
+static struct fork_arg *ipmi_spawn(const struct nodeip *node, const char *user,
+		const char *pass, const char *port, const char *action)
+{
+	int sysret;
+	struct fork_arg *farg;
+
+	farg = malloc(sizeof(struct fork_arg));
+	check_pointer(farg);
+	farg->node = node;
+	farg->user = user;
+	farg->pass = pass;
+	farg->port = port;
+	farg->action = action;
+
+	sysret = pthread_create(&farg->thid, NULL, fork_thread, farg);
+	if (sysret) {
+		free(farg);
+		farg = NULL;
+		logmsg(LOG_ERR, "pthread_create failed: %d\n", sysret);
+	}
+	return farg;
 }
 
 static const char *metadata =
